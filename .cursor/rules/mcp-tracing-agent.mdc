@@ -1,0 +1,35 @@
+---
+description: MCP tracing server — Node ESM, stdio transport, log analysis tools
+globs: **/*.{ts,json}
+alwaysApply: false
+---
+
+# MCP Tracing Agent
+
+## Stack
+- Node.js ESM (`"type": "module"` in package.json)
+- TypeScript: `module` / `moduleResolution` = `nodenext`
+- `@modelcontextprotocol/sdk`: `Server` + `StdioServerTransport`
+- Validate tool arguments with Zod
+
+## MCP server patterns
+- Register tools with `ListToolsRequestSchema` and handle calls with `CallToolRequestSchema`
+- Tool success: `content: [{ type: "text", text: ... }]`
+- Tool failure: `isError: true` with message in `content` — do not crash the server
+- MCP protocol uses stdout; use `console.error` only for debug logs
+
+## trace_analyzer tool
+- Input: `{ traceId: string }` (required)
+- Read logs from `mock_logs/*.log` via `path.resolve(__dirname, "..", "mock_logs")` — not `process.cwd()`
+- Log line format: `[TIMESTAMP] LEVEL message (traceId)`
+- Filter lines containing `traceId`, extract timestamp from first `[...]` bracket
+- Sort all matched events chronologically before returning JSON
+
+## TypeScript imports
+- Use `.js` extension in imports when using NodeNext (e.g. `from "./service.js"`)
+
+## Do not
+- Hardcode secrets or API keys
+- Put the script path inside `command` in mcp.json — use `command` + `args` array
+- Change `LOGS_DIR` to cwd without verifying mock_logs location
+- Run `node` on `.ts` files without `tsx` or a prior `tsc` build
