@@ -32,9 +32,15 @@ Each log line looks like this:
 
 The service name is the file name. Events from every file are merged and sorted by the timestamp in the first brackets.
 
+The tool also returns a summary, not only the raw lines:
+
+- which services took part
+- how long the trace lasted, from the first event to the last
+- the first `ERROR` line, or `null` when the trace has no error
+
 ## Sample
 
-For `trace_999` the mock logs produce this order:
+For `trace_999` the summary is: two services (`gateway-service`, `payment-service`), about 2300ms, and no error. The timeline is:
 
 1. `gateway-service` receives `POST /orders`
 2. `gateway-service` forwards the payment
@@ -73,7 +79,7 @@ The process speaks MCP on stdout. Debug lines go to stderr only, so they do not 
 
 | Name | Input | Result |
 | --- | --- | --- |
-| `trace_analyzer` | `{ "traceId": "trace_999" }` | JSON with the matching events, each with `service`, `timestamp`, and `rawLine`, sorted by time |
+| `trace_analyzer` | `{ "traceId": "trace_999" }` | JSON with `summary` (services, duration, first error) and `events` sorted by time |
 
 Unknown ids return an empty event list. Invalid input returns a tool error and the process keeps running.
 

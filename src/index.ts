@@ -30,6 +30,38 @@ const LOGS_DIR = path.resolve(__dirname, "..", "mock_logs");
 
 console.error(`[MCP DEBUG] Looking for logs in absolute path: ${LOGS_DIR}`);
 
+type TraceEvent = {
+  service: string;
+  level: string;
+  rawLine: string;
+  timestamp: string;
+};
+
+const summarizeTrace = (traceId: string, events: TraceEvent[]) => {
+  const services = [...new Set(events.map((event) => event.service))];
+  const first = events[0];
+  const last = events[events.length - 1];
+  const startedAt = first?.timestamp ?? null;
+  const endedAt = last?.timestamp ?? null;
+  const durationMs =
+    startedAt && endedAt
+      ? new Date(endedAt).getTime() - new Date(startedAt).getTime()
+      : null;
+  const firstError = events.find((event) => event.level === "ERROR") ?? null;
+
+  return {
+    traceId,
+    eventCount: events.length,
+    services,
+    startedAt,
+    endedAt,
+    durationMs,
+    firstError: firstError
+      ? { service: firstError.service, timestamp: firstError.timestamp, line: firstError.rawLine }
+      : null,
+  };
+};
+
 /**
  * 2. רישום הכלים הזמינים (List Tools)
  * כאן אנחנו מספרים ל-LLM איזה כלים קיימים ומה הם דורשים לקבל
@@ -39,7 +71,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: "trace_analyzer",
-        description: "סורק קובצי לוג מבוזרים ומחלץ אירועים עבור Trace ID ספציפי מסודרים לפי זמן",
+        description:
+          "Scans distributed service logs for one trace id, sorts the events by time, and returns a short summary: services involved, duration, and the first ERROR.",
         inputSchema: {
           type: "object",
           properties: {
@@ -71,7 +104,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       await fs.mkdir(LOGS_DIR, { recursive: true });
       const files = await fs.readdir(LOGS_DIR);
       
-      const matchedEvents: any[] = [];
+      const matchedEvents: TraceEvent[] = [];
 
       // סריקה אסינכרונית של כל קובצי הלוג בתיקייה (מדמה מיקרו-סרוויסים שונים)
       for (const file of files) {
@@ -82,30 +115,30 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const lines = content.split("\n");
 
         for (const line of lines) {
-          if (line.includes(traceId)) {
-            // אנחנו מצפים לפורמט לוג פשוט: [TIMESTAMP] [LEVEL] MESSAGE (TraceID)
-            // דוגמה: [2026-06-02T10:00:00.000Z] INFO Order created (trace_123)
-            matchedEvents.push({
-              service: file.replace(".log", ""),
-              rawLine: line,
-              // חילוץ זמני פשוט לצורך המיון
-              timestamp: line.match(/\[(.*?)\]/)?.[1] || new Date().toISOString()
-            });
-          }
+          if (!line.includes(traceId)) continue;
+
+          // [2026-06-02T10:00:00.000Z] INFO Order created (trace_123)
+          const timestamp = line.match(/\[(.*?)\]/)?.[1] ?? new Date().toISOString();
+          const level = line.match(/\]\s+([A-Z]+)\s/)?.[1] ?? "UNKNOWN";
+
+          matchedEvents.push({
+            service: file.replace(".log", ""),
+            level,
+            rawLine: line,
+            timestamp,
+          });
         }
       }
 
-      // מיון האירועים לפי סדר כרונולוגי מדויק (קריטי למערכות מבוזרות!)
       matchedEvents.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+      const summary = summarizeTrace(traceId, matchedEvents);
 
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify({
-              message: `נמצאו ${matchedEvents.length} אירועים עבור Trace ID: ${traceId}`,
-              events: matchedEvents
-            }, null, 2),
+            text: JSON.stringify({ summary, events: matchedEvents }, null, 2),
           },
         ],
       };
