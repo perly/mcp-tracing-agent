@@ -1,3 +1,5 @@
 [2026-06-02T10:00:01.200Z] INFO Processing payment for order_id_55 (trace_999)
 [2026-06-02T10:00:01.300Z] WARN Database connection slow, retrying... (trace_999)
 [2026-06-02T10:00:03.350Z] INFO Payment captured successfully in DB (trace_999)
+[2026-06-02T11:00:00.100Z] INFO Processing payment for order_id_77 (trace_500)
+[2026-06-02T11:00:05.000Z] ERROR Payment provider timed out after 5000ms (trace_500)

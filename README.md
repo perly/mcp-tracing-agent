@@ -49,14 +49,37 @@ For `trace_999` the summary is: two services (`gateway-service`, `payment-servic
 5. `payment-service` captures the payment
 6. `gateway-service` returns `200 OK`
 
+### Failure sample: `trace_500`
+
+The gateway still returns `200 OK`, but the payment service times out. The summary points at that hop:
+
+```json
+{
+  "traceId": "trace_500",
+  "eventCount": 5,
+  "services": ["gateway-service", "payment-service"],
+  "startedAt": "2026-06-02T11:00:00.000Z",
+  "endedAt": "2026-06-02T11:00:05.100Z",
+  "durationMs": 5100,
+  "firstError": {
+    "service": "payment-service",
+    "timestamp": "2026-06-02T11:00:05.000Z",
+    "line": "[2026-06-02T11:00:05.000Z] ERROR Payment provider timed out after 5000ms (trace_500)"
+  }
+}
+```
+
 ## Run it
 
 Requirements: Node.js 20+.
 
 ```bash
 npm install
+npm test
 npx tsc
 ```
+
+`npm test` checks three things: events are sorted by time, an unknown trace id returns no events, and `trace_500` names `payment-service` as the first error.
 
 Cursor starts the server itself. In `~/.cursor/mcp.json`:
 

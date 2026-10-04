@@ -8,6 +8,7 @@ import { z } from "zod";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { fileURLToPath } from "url";
+import { analyzeTrace, type ServiceLog } from "./analyze.js";
 
 
 // 1. אתחול שרת ה-MCP
@@ -30,36 +31,20 @@ const LOGS_DIR = path.resolve(__dirname, "..", "mock_logs");
 
 console.error(`[MCP DEBUG] Looking for logs in absolute path: ${LOGS_DIR}`);
 
-type TraceEvent = {
-  service: string;
-  level: string;
-  rawLine: string;
-  timestamp: string;
-};
+const readServiceLogs = async (): Promise<ServiceLog[]> => {
+  await fs.mkdir(LOGS_DIR, { recursive: true });
+  const files = await fs.readdir(LOGS_DIR);
+  const logs: ServiceLog[] = [];
 
-const summarizeTrace = (traceId: string, events: TraceEvent[]) => {
-  const services = [...new Set(events.map((event) => event.service))];
-  const first = events[0];
-  const last = events[events.length - 1];
-  const startedAt = first?.timestamp ?? null;
-  const endedAt = last?.timestamp ?? null;
-  const durationMs =
-    startedAt && endedAt
-      ? new Date(endedAt).getTime() - new Date(startedAt).getTime()
-      : null;
-  const firstError = events.find((event) => event.level === "ERROR") ?? null;
+  for (const file of files) {
+    if (!file.endsWith(".log")) continue;
+    logs.push({
+      service: file.replace(".log", ""),
+      content: await fs.readFile(path.join(LOGS_DIR, file), "utf-8"),
+    });
+  }
 
-  return {
-    traceId,
-    eventCount: events.length,
-    services,
-    startedAt,
-    endedAt,
-    durationMs,
-    firstError: firstError
-      ? { service: firstError.service, timestamp: firstError.timestamp, line: firstError.rawLine }
-      : null,
-  };
+  return logs;
 };
 
 /**
@@ -100,45 +85,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // ולידציה של הפרמטרים בעזרת Zod
       const { traceId } = z.object({ traceId: z.string() }).parse(args);
 
-      // ודואים שתיקיית הלוגים קיימת
-      await fs.mkdir(LOGS_DIR, { recursive: true });
-      const files = await fs.readdir(LOGS_DIR);
-      
-      const matchedEvents: TraceEvent[] = [];
-
-      // סריקה אסינכרונית של כל קובצי הלוג בתיקייה (מדמה מיקרו-סרוויסים שונים)
-      for (const file of files) {
-        if (!file.endsWith(".log")) continue;
-        
-        const filePath = path.join(LOGS_DIR, file);
-        const content = await fs.readFile(filePath, "utf-8");
-        const lines = content.split("\n");
-
-        for (const line of lines) {
-          if (!line.includes(traceId)) continue;
-
-          // [2026-06-02T10:00:00.000Z] INFO Order created (trace_123)
-          const timestamp = line.match(/\[(.*?)\]/)?.[1] ?? new Date().toISOString();
-          const level = line.match(/\]\s+([A-Z]+)\s/)?.[1] ?? "UNKNOWN";
-
-          matchedEvents.push({
-            service: file.replace(".log", ""),
-            level,
-            rawLine: line,
-            timestamp,
-          });
-        }
-      }
-
-      matchedEvents.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-
-      const summary = summarizeTrace(traceId, matchedEvents);
+      const logs = await readServiceLogs();
+      const result = analyzeTrace(traceId, logs);
 
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify({ summary, events: matchedEvents }, null, 2),
+            text: JSON.stringify(result, null, 2),
           },
         ],
       };
