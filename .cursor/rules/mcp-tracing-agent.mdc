@@ -28,9 +28,9 @@ alwaysApply: false
 ## API
 - NestJS app in `api/`
 - The running app stores events in Postgres through `PrismaEventStore`
-- `npm run seed -w @tracing/api` reads `mock_logs` and posts those lines. The server does not read the files on startup.
+- `npm run seed -w @tracing/api` reads `mock_logs` and sends those lines in one `POST /events/batch`. The API replaces those traces in one transaction. The server does not read the files on startup.
 - The website in `web/` calls the API. It does not read log files or the MCP tool.
-- `MemoryEventStore` is only for the API test, which stays free of Docker
+- `MemoryEventStore` is for the Nest timeline test, which stays free of Docker. `prisma-event-store.test.ts` runs the Postgres filter and needs the database.
 - Summaries go through `traceFromEvents` and log lines through `formatRawLine`
 - Local database URL lives in `api/.env`. Copy `api/.env.example`. Do not commit `.env`
 

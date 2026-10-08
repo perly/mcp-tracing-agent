@@ -95,5 +95,36 @@ describe('traces', () => {
     const list = await request(app.getHttpServer()).get('/traces?status=error').expect(200);
     assert.equal(list.body[0].traceId, 'trace_500');
     assert.equal(list.body[0].status, 'error');
+
+    await request(app.getHttpServer()).post('/events').send(trace500Events[0]).expect(409);
+  });
+
+  it('replaces a trace in one request', async () => {
+    const event = {
+      traceId: 'trace_replace',
+      service: 'gateway-service',
+      level: 'INFO',
+      message: 'first version',
+      timestamp: '2026-06-02T12:00:00.000Z',
+    };
+    await request(app.getHttpServer()).post('/events').send(event).expect(201);
+    await request(app.getHttpServer())
+      .post('/events/batch')
+      .send({
+        events: [
+          {
+            traceId: 'trace_replace',
+            service: 'gateway-service',
+            level: 'INFO',
+            message: 'only version',
+            timestamp: '2026-06-02T12:00:02.000Z',
+          },
+        ],
+      })
+      .expect(201);
+
+    const detail = await request(app.getHttpServer()).get('/traces/trace_replace').expect(200);
+    assert.equal(detail.body.summary.eventCount, 1);
+    assert.match(detail.body.events[0].rawLine, /only version/);
   });
 });

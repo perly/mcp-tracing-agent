@@ -10,7 +10,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
     "seed": "npm run build -w @tracing/analyzer && tsc -p tsconfig.json && node dist/seed.js",
-    "test": "npm run build -w @tracing/analyzer && prisma generate && tsc -p tsconfig.json && node --test dist/traces.e2e.test.js"
+    "test": "npm run build -w @tracing/analyzer && prisma generate && tsc -p tsconfig.json && node --test dist/traces.e2e.test.js dist/prisma-event-store.test.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

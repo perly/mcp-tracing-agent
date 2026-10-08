@@ -77,7 +77,7 @@ npm test
 npm run build
 ```
 
-`npm test` runs the analyzer tests, the API test, and the fetch-trace tests. The analyzer checks that events are sorted by time, an unknown trace id returns no events, and `trace_500` names `payment-service` as the first error. The API test checks that same timeline through Nest. The fetch-trace tests check that the tool's client reads the JSON and reports when the API is down.
+`npm test` runs the analyzer tests, the API tests, and the fetch-trace tests. The analyzer checks that events are sorted by time, an unknown trace id returns no events, and `trace_500` names `payment-service` as the first error. The API tests check that same timeline through Nest, and that the Postgres filters keep the error traces and the ok traces apart. Postgres has to be running for that filter test. The fetch-trace tests check that the tool's client reads the JSON and reports when the API is down.
 
 Cursor starts the server itself. In `~/.cursor/mcp.json`:
 
@@ -112,9 +112,10 @@ npm run start:dev -w @tracing/api
 npm run seed -w @tracing/api
 ```
 
-The server listens on port 3000. The seed reads `mock_logs` and posts every line to `POST /events`. Run it again after you add a line. Starting the server does not read the files.
+The server listens on port 3000. The seed reads `mock_logs` and sends every line in one `POST /events/batch`. The API replaces those traces in one database transaction. Run it again after you add a line. Starting the server does not read the files.
 
-- `POST /events` takes `traceId`, `service`, `level`, `message`, and `timestamp`.
+- `POST /events` takes `traceId`, `service`, `level`, `message`, and `timestamp`. A second copy of the same event is rejected.
+- `POST /events/batch` takes `{ events: [...] }` and replaces those traces in one transaction.
 - `GET /traces` lists up to 50 summaries, newest first. `?status=error` keeps traces that have an error. `?status=ok` keeps the rest.
 - `GET /traces/:traceId` returns `{ summary, events }`. An unknown id returns an empty event list.
 

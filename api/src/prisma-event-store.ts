@@ -1,7 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { EventStore, NewEvent, StoredEvent, TraceStatus } from './event-store.js';
+import {
+  assertUniqueEvents,
+  DuplicateEventError,
+  EventStore,
+  NewEvent,
+  StoredEvent,
+  TraceStatus,
+} from './event-store.js';
 import { PrismaService } from './prisma.service.js';
+
+const isUniqueViolation = (error: unknown): boolean =>
+  error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
 
 const toStored = (event: {
   id: string;
@@ -26,17 +36,49 @@ export class PrismaEventStore implements EventStore {
   constructor(private readonly prisma: PrismaService) {}
 
   async add(event: NewEvent & { rawLine: string }): Promise<StoredEvent> {
-    const created = await this.prisma.event.create({
-      data: {
-        traceId: event.traceId,
-        service: event.service,
-        level: event.level,
-        message: event.message,
-        timestamp: new Date(event.timestamp),
-        rawLine: event.rawLine,
-      },
-    });
-    return toStored(created);
+    try {
+      const created = await this.prisma.event.create({
+        data: {
+          traceId: event.traceId,
+          service: event.service,
+          level: event.level,
+          message: event.message,
+          timestamp: new Date(event.timestamp),
+          rawLine: event.rawLine,
+        },
+      });
+      return toStored(created);
+    } catch (error: unknown) {
+      if (isUniqueViolation(error)) throw new DuplicateEventError();
+      throw error;
+    }
+  }
+
+  async replaceTraces(events: (NewEvent & { rawLine: string })[]): Promise<number> {
+    assertUniqueEvents(events);
+    const traceIds = [...new Set(events.map((event) => event.traceId))];
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        if (traceIds.length > 0) {
+          await tx.event.deleteMany({ where: { traceId: { in: traceIds } } });
+        }
+        if (events.length === 0) return;
+        await tx.event.createMany({
+          data: events.map((event) => ({
+            traceId: event.traceId,
+            service: event.service,
+            level: event.level,
+            message: event.message,
+            timestamp: new Date(event.timestamp),
+            rawLine: event.rawLine,
+          })),
+        });
+      });
+    } catch (error: unknown) {
+      if (isUniqueViolation(error)) throw new DuplicateEventError();
+      throw error;
+    }
+    return events.length;
   }
 
   async listByTraceId(traceId: string): Promise<StoredEvent[]> {

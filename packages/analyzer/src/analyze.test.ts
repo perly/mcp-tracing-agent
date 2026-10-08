@@ -39,6 +39,31 @@ describe("analyzeTrace", () => {
     );
   });
 
+  it("does not match a longer trace id", () => {
+    const result = analyzeTrace("trace_5", [
+      {
+        service: "gateway-service",
+        content: "[2026-06-02T10:00:01.000Z] INFO hello (trace_500)",
+      },
+    ]);
+
+    assert.equal(result.summary.eventCount, 0);
+  });
+
+  it("skips a line that mentions the id but is not a log line", () => {
+    const result = analyzeTrace("trace_500", [
+      {
+        service: "gateway-service",
+        content:
+          "see trace_500 in this note\n[2026-06-02T10:00:01.000Z] INFO ok (trace_500)",
+      },
+    ]);
+
+    assert.equal(result.summary.eventCount, 1);
+    assert.equal(result.events[0]?.level, "INFO");
+    assert.equal(result.events[0]?.timestamp, "2026-06-02T10:00:01.000Z");
+  });
+
   it("returns zero events for an unknown trace id", () => {
     const result = analyzeTrace("trace_missing", [
       {

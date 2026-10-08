@@ -1,6 +1,7 @@
-import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable } from '@nestjs/common';
 import { formatRawLine, traceFromEvents, type TraceEvent } from '@tracing/analyzer';
 import {
+  DuplicateEventError,
   EVENT_STORE,
   type EventStore,
   type NewEvent,
@@ -28,10 +29,12 @@ export class TracesService {
   constructor(@Inject(EVENT_STORE) private readonly store: EventStore) {}
 
   async create(input: NewEvent): Promise<StoredEvent> {
-    return this.store.add({
-      ...input,
-      rawLine: formatRawLine(input),
-    });
+    return this.guard(() => this.store.add(this.withRawLine(input)));
+  }
+
+  async replace(inputs: NewEvent[]): Promise<{ count: number }> {
+    const count = await this.guard(() => this.store.replaceTraces(inputs.map((input) => this.withRawLine(input))));
+    return { count };
   }
 
   async findOne(traceId: string) {
@@ -57,5 +60,21 @@ export class TracesService {
     });
 
     return summaries.sort((a, b) => (b.endedAt ?? '').localeCompare(a.endedAt ?? ''));
+  }
+
+  private withRawLine(input: NewEvent): NewEvent & { rawLine: string } {
+    const normalized = { ...input, timestamp: new Date(input.timestamp).toISOString() };
+    return { ...normalized, rawLine: formatRawLine(normalized) };
+  }
+
+  private async guard<T>(work: () => Promise<T>): Promise<T> {
+    try {
+      return await work();
+    } catch (error: unknown) {
+      if (error instanceof DuplicateEventError) {
+        throw new ConflictException('This event is already stored');
+      }
+      throw error;
+    }
   }
 }

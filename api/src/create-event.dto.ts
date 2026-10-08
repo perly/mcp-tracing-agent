@@ -1,4 +1,5 @@
-import { IsISO8601, IsNotEmpty, IsString, Matches } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ArrayMinSize, IsArray, IsISO8601, IsNotEmpty, IsString, Matches, ValidateNested } from 'class-validator';
 
 export class CreateEventDto {
   @IsString()
@@ -19,4 +20,12 @@ export class CreateEventDto {
 
   @IsISO8601()
   timestamp: string;
+}
+
+export class ReplaceEventsDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => CreateEventDto)
+  events: CreateEventDto[];
 }

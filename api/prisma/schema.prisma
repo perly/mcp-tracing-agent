@@ -16,5 +16,6 @@ model Event {
   timestamp DateTime
   rawLine   String
 
+  @@unique([traceId, service, timestamp, rawLine])
   @@index([traceId, timestamp])
 }

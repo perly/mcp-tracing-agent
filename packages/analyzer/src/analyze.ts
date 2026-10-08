@@ -42,16 +42,6 @@ export const parseLogLine = (service: string, line: string): ParsedLogLine | nul
   return { service, timestamp, level, message, traceId, rawLine: line };
 };
 
-const parseLine = (service: string, line: string): TraceEvent => {
-  const parsed = parseLogLine(service, line);
-  if (parsed) {
-    return { service, level: parsed.level, rawLine: line, timestamp: parsed.timestamp };
-  }
-  const timestamp = line.match(/\[(.*?)\]/)?.[1] ?? new Date().toISOString();
-  const level = line.match(/\]\s+([A-Z]+)\s/)?.[1] ?? "UNKNOWN";
-  return { service, level, rawLine: line, timestamp };
-};
-
 export const summarizeTrace = (traceId: string, events: TraceEvent[]): TraceSummary => {
   const services = [...new Set(events.map((event) => event.service))];
   const first = events[0];
@@ -99,8 +89,14 @@ export const analyzeTrace = (traceId: string, logs: ServiceLog[]) => {
 
   for (const log of logs) {
     for (const line of log.content.split("\n")) {
-      if (!line.includes(traceId)) continue;
-      events.push(parseLine(log.service, line));
+      const parsed = parseLogLine(log.service, line);
+      if (!parsed || parsed.traceId !== traceId) continue;
+      events.push({
+        service: parsed.service,
+        level: parsed.level,
+        rawLine: line,
+        timestamp: parsed.timestamp,
+      });
     }
   }
 

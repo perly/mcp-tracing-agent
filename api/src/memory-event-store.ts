@@ -1,15 +1,39 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { EventStore, NewEvent, StoredEvent, TraceStatus } from './event-store.js';
+import {
+  assertUniqueEvents,
+  DuplicateEventError,
+  EventStore,
+  eventKey,
+  NewEvent,
+  StoredEvent,
+  TraceStatus,
+} from './event-store.js';
 
 @Injectable()
 export class MemoryEventStore implements EventStore {
   private readonly events: StoredEvent[] = [];
 
   async add(event: NewEvent & { rawLine: string }): Promise<StoredEvent> {
+    if (this.events.some((row) => eventKey(row) === eventKey(event))) {
+      throw new DuplicateEventError();
+    }
     const stored = { ...event, id: randomUUID() };
     this.events.push(stored);
     return stored;
+  }
+
+  async replaceTraces(events: (NewEvent & { rawLine: string })[]): Promise<number> {
+    assertUniqueEvents(events);
+    const traceIds = new Set(events.map((event) => event.traceId));
+    for (let index = this.events.length - 1; index >= 0; index -= 1) {
+      const row = this.events[index];
+      if (row && traceIds.has(row.traceId)) this.events.splice(index, 1);
+    }
+    for (const event of events) {
+      this.events.push({ ...event, id: randomUUID() });
+    }
+    return events.length;
   }
 
   async listByTraceId(traceId: string): Promise<StoredEvent[]> {

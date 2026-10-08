@@ -5,6 +5,10 @@ import type { TraceDetail, TraceEvent, TraceListItem, TraceStatus, TraceSummary 
 
 const apiDown = 'The API is not running on port 3000.'
 
+function errorText(error: unknown): string {
+  return error instanceof Error && error.message ? error.message : apiDown
+}
+
 function isFirstError(event: TraceEvent, summary: TraceSummary): boolean {
   return (
     summary.firstError?.service === event.service &&
@@ -32,8 +36,10 @@ export function App() {
         setListError(null)
         setTraceId((current) => current || items[0]?.traceId || '')
       })
-      .catch(() => {
-        if (!cancelled) setListError(apiDown)
+      .catch((error: unknown) => {
+        if (cancelled) return
+        setTraces([])
+        setListError(errorText(error))
       })
     return () => {
       cancelled = true
@@ -52,8 +58,10 @@ export function App() {
         setDetail(next)
         setDetailError(null)
       })
-      .catch(() => {
-        if (!cancelled) setDetailError(apiDown)
+      .catch((error: unknown) => {
+        if (cancelled) return
+        setDetail(null)
+        setDetailError(errorText(error))
       })
     return () => {
       cancelled = true
@@ -188,11 +196,11 @@ function Timeline(props: { detail: TraceDetail }) {
         )}
       </header>
       <ol className="timeline">
-        {events.map((event) => {
+        {events.map((event, index) => {
           const firstError = isFirstError(event, summary)
           const className = firstError ? 'event error' : event.level === 'WARN' ? 'event warn' : 'event'
           return (
-            <li key={`${event.timestamp}-${event.service}-${event.rawLine}`} className={className}>
+            <li key={`${event.timestamp}-${event.service}-${event.rawLine}-${index}`} className={className}>
               <time dateTime={event.timestamp}>{formatClock(event.timestamp)}</time>
               <span className="service">{event.service}</span>
               <span className="level">{event.level}</span>

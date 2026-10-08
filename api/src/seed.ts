@@ -1,8 +1,6 @@
-import 'dotenv/config';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PrismaClient } from '@prisma/client';
 import { parseLogLine, type ParsedLogLine } from '@tracing/analyzer';
 
 const apiUrl = process.env.API_URL ?? 'http://localhost:3000';
@@ -37,28 +35,21 @@ const main = async (): Promise<void> => {
     throw new Error(`API at ${apiUrl} returned ${ready.status}. Start it before seeding.`);
   }
 
-  const prisma = new PrismaClient();
-  try {
-    await prisma.event.deleteMany({ where: { traceId: { in: traceIds } } });
-  } finally {
-    await prisma.$disconnect();
-  }
-
-  for (const event of events) {
-    const response = await fetch(`${apiUrl}/events`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
+  const response = await fetch(`${apiUrl}/events/batch`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      events: events.map((event) => ({
         traceId: event.traceId,
         service: event.service,
         level: event.level,
         message: event.message,
         timestamp: event.timestamp,
-      }),
-    });
-    if (!response.ok) {
-      throw new Error(`POST /events failed with ${response.status}: ${await response.text()}`);
-    }
+      })),
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`POST /events/batch failed with ${response.status}: ${await response.text()}`);
   }
 
   console.log(`Seeded ${events.length} events for ${traceIds.join(', ')}`);
