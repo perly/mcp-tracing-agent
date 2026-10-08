@@ -20,10 +20,35 @@ export type ServiceLog = {
   content: string;
 };
 
+export type ParsedLogLine = {
+  service: string;
+  timestamp: string;
+  level: string;
+  message: string;
+  traceId: string;
+  rawLine: string;
+};
+
+const LOG_LINE = /^\[(.+?)\]\s+([A-Z]+)\s+(.+?)\s+\(([^)]+)\)\s*$/;
+
+export const parseLogLine = (service: string, line: string): ParsedLogLine | null => {
+  const match = line.match(LOG_LINE);
+  if (!match) return null;
+  const timestamp = match[1];
+  const level = match[2];
+  const message = match[3];
+  const traceId = match[4];
+  if (!timestamp || !level || !message || !traceId) return null;
+  return { service, timestamp, level, message, traceId, rawLine: line };
+};
+
 const parseLine = (service: string, line: string): TraceEvent => {
+  const parsed = parseLogLine(service, line);
+  if (parsed) {
+    return { service, level: parsed.level, rawLine: line, timestamp: parsed.timestamp };
+  }
   const timestamp = line.match(/\[(.*?)\]/)?.[1] ?? new Date().toISOString();
   const level = line.match(/\]\s+([A-Z]+)\s/)?.[1] ?? "UNKNOWN";
-
   return { service, level, rawLine: line, timestamp };
 };
 
@@ -52,6 +77,23 @@ export const summarizeTrace = (traceId: string, events: TraceEvent[]): TraceSumm
   };
 };
 
+export const formatRawLine = (input: {
+  timestamp: string;
+  level: string;
+  message: string;
+  traceId: string;
+}): string => `[${input.timestamp}] ${input.level} ${input.message} (${input.traceId})`;
+
+const orderEvents = (events: TraceEvent[]): TraceEvent[] =>
+  [...events].sort(
+    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+  );
+
+export const traceFromEvents = (traceId: string, events: TraceEvent[]) => {
+  const ordered = orderEvents(events);
+  return { summary: summarizeTrace(traceId, ordered), events: ordered };
+};
+
 export const analyzeTrace = (traceId: string, logs: ServiceLog[]) => {
   const events: TraceEvent[] = [];
 
@@ -62,7 +104,5 @@ export const analyzeTrace = (traceId: string, logs: ServiceLog[]) => {
     }
   }
 
-  events.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-
-  return { summary: summarizeTrace(traceId, events), events };
+  return traceFromEvents(traceId, events);
 };

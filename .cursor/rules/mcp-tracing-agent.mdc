@@ -20,10 +20,19 @@ alwaysApply: false
 
 ## trace_analyzer tool
 - Input: `{ traceId: string }` (required)
-- Read logs from `mock_logs/*.log` via `path.resolve(__dirname, "..", "mock_logs")` — not `process.cwd()`
-- Log line format: `[TIMESTAMP] LEVEL message (traceId)`
-- Filter lines containing `traceId`, extract timestamp from first `[...]` bracket
-- Sort all matched events chronologically before returning JSON
+- Call `GET ${TRACE_API_URL}/traces/:traceId`. Default URL is `http://localhost:3000`
+- Return the API JSON. If the API is down or not OK, return `isError: true` and keep the process running
+- Do not read `mock_logs` from this tool. The seed and the analyzer tests still use those files
+- Sorting, the summary, and the first `ERROR` live only in `packages/analyzer`. Do not copy that logic into the tool.
+
+## API
+- NestJS app in `api/`
+- The running app stores events in Postgres through `PrismaEventStore`
+- `npm run seed -w @tracing/api` reads `mock_logs` and posts those lines. The server does not read the files on startup.
+- The website in `web/` calls the API. It does not read log files or the MCP tool.
+- `MemoryEventStore` is only for the API test, which stays free of Docker
+- Summaries go through `traceFromEvents` and log lines through `formatRawLine`
+- Local database URL lives in `api/.env`. Copy `api/.env.example`. Do not commit `.env`
 
 ## TypeScript imports
 - Use `.js` extension in imports when using NodeNext (e.g. `from "./service.js"`)
@@ -31,5 +40,5 @@ alwaysApply: false
 ## Do not
 - Hardcode secrets or API keys
 - Put the script path inside `command` in mcp.json — use `command` + `args` array
-- Change `LOGS_DIR` to cwd without verifying mock_logs location
+- Point `trace_analyzer` back at `mock_logs`
 - Run `node` on `.ts` files without `tsx` or a prior `tsc` build

@@ -1,7 +1,9 @@
 node_modules/
 dist/
+*.tsbuildinfo
 .env
 .env.*
+!.env.example
 *.pem
 *.key
 .DS_Store
@@ -11,3 +13,7 @@ src/**/*.js
 src/**/*.js.map
 src/**/*.d.ts
 src/**/*.d.ts.map
+packages/**/src/**/*.js
+packages/**/src/**/*.js.map
+packages/**/src/**/*.d.ts
+packages/**/src/**/*.d.ts.map

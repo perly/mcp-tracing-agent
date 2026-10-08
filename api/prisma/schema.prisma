@@ -1,0 +1,20 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Event {
+  id        String   @id @default(cuid())
+  traceId   String
+  service   String
+  level     String
+  message   String
+  timestamp DateTime
+  rawLine   String
+
+  @@index([traceId, timestamp])
+}

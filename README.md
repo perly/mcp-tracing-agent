@@ -2,7 +2,7 @@
 
 A small [Model Context Protocol](https://modelcontextprotocol.io) server that reconstructs one distributed trace from logs of several services.
 
-An agent (for example Cursor) calls a single tool with a trace id. The server scans each service log, keeps the matching lines, and returns them in time order. That is the timeline of one request as it moved between services.
+An agent (for example Cursor) calls a single tool with a trace id. The server asks the trace API for that id and returns the timeline. That is the same summary and events the website shows.
 
 ## Why this exists
 
@@ -17,11 +17,9 @@ Cursor agent
     v
 MCP server (stdio)
     |
-    +--> mock_logs/gateway-service.log
-    +--> mock_logs/payment-service.log
-    |
+    |  GET /traces/:traceId
     v
-events sorted by timestamp
+Nest API and Postgres
 ```
 
 Each log line looks like this:
@@ -30,7 +28,7 @@ Each log line looks like this:
 [2026-06-02T10:00:01.100Z] INFO Received POST /orders request (trace_999)
 ```
 
-The service name is the file name. Events from every file are merged and sorted by the timestamp in the first brackets.
+The API already sorted the events and named the first error. The tool returns that JSON. The mock log files stay in the repo for the seed and the analyzer tests. The tool does not open them.
 
 The tool also returns a summary, not only the raw lines:
 
@@ -76,7 +74,7 @@ Requirements: Node.js 20+.
 ```bash
 npm install
 npm test
-npx tsc
+npm run build
 ```
 
 `npm test` checks three things: events are sorted by time, an unknown trace id returns no events, and `trace_500` names `payment-service` as the first error.
@@ -88,15 +86,45 @@ Cursor starts the server itself. In `~/.cursor/mcp.json`:
   "mcpServers": {
     "tracing-agent": {
       "command": "node",
-      "args": ["/absolute/path/to/mcp-tracing-agent/dist/index.js"]
+      "args": ["/absolute/path/to/mcp-tracing-agent/dist/index.js"],
+      "env": {
+        "TRACE_API_URL": "http://localhost:3000"
+      }
     }
   }
 }
 ```
 
-Then ask the agent to analyze `trace_999`.
+`TRACE_API_URL` defaults to `http://localhost:3000`. The API has to be running. If it is down, the tool returns an error and the process stays up. Then ask the agent to analyze `trace_999`.
 
 The process speaks MCP on stdout. Debug lines go to stderr only, so they do not break the protocol.
+
+## API
+
+The NestJS API lives in `api`. It accepts events and returns the same summary the tool already builds. Events are stored in local Postgres.
+
+```bash
+docker compose up -d
+npm run prisma:migrate -w @tracing/api
+npm run start:dev -w @tracing/api
+npm run seed -w @tracing/api
+```
+
+The server listens on port 3000. The seed reads `mock_logs` and posts every line to `POST /events`. Run it again after you add a line. Starting the server does not read the files.
+
+- `POST /events` takes `traceId`, `service`, `level`, `message`, and `timestamp`.
+- `GET /traces` lists up to 50 summaries, newest first. `?status=error` keeps traces that have an error. `?status=ok` keeps the rest.
+- `GET /traces/:traceId` returns `{ summary, events }`. An unknown id returns an empty event list.
+
+## Website
+
+The React app lives in `web`. It reads the same API: a list of traces, and the timeline for one trace id.
+
+```bash
+npm run dev -w @tracing/web
+```
+
+Open `http://localhost:5173`. The page calls the API on port 3000.
 
 ## Tool
 
@@ -109,5 +137,8 @@ Unknown ids return an empty event list. Invalid input returns a tool error and t
 ## Stack
 
 - Node.js, TypeScript, ESM
+- `@tracing/analyzer` in `packages/analyzer`: the only sort and first-error implementation
+- NestJS API with Postgres via Prisma
+- React timeline in `web`
 - `@modelcontextprotocol/sdk` with stdio transport
 - Zod for tool arguments

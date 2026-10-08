@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: tracing
+      POSTGRES_PASSWORD: tracing
+      POSTGRES_DB: tracing
+    ports:
+      - "5432:5432"
+    volumes:
+      - tracing-pg:/var/lib/postgresql/data
+
+volumes:
+  tracing-pg:

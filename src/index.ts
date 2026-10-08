@@ -5,10 +5,7 @@ import {
   CallToolRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import * as fs from "fs/promises";
-import * as path from "path";
-import { fileURLToPath } from "url";
-import { analyzeTrace, type ServiceLog } from "./analyze.js";
+import { fetchTrace } from "./fetch-trace.js";
 
 
 // 1. אתחול שרת ה-MCP
@@ -24,28 +21,7 @@ const server = new Server(
   }
 );
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-// הגדרת נתיב זמני לקובצי הלוג שננתח (לצורך הבדיקה המקומית)
-const LOGS_DIR = path.resolve(__dirname, "..", "mock_logs");
-
-console.error(`[MCP DEBUG] Looking for logs in absolute path: ${LOGS_DIR}`);
-
-const readServiceLogs = async (): Promise<ServiceLog[]> => {
-  await fs.mkdir(LOGS_DIR, { recursive: true });
-  const files = await fs.readdir(LOGS_DIR);
-  const logs: ServiceLog[] = [];
-
-  for (const file of files) {
-    if (!file.endsWith(".log")) continue;
-    logs.push({
-      service: file.replace(".log", ""),
-      content: await fs.readFile(path.join(LOGS_DIR, file), "utf-8"),
-    });
-  }
-
-  return logs;
-};
+const apiUrl = process.env.TRACE_API_URL ?? "http://localhost:3000";
 
 /**
  * 2. רישום הכלים הזמינים (List Tools)
@@ -57,13 +33,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "trace_analyzer",
         description:
-          "Scans distributed service logs for one trace id, sorts the events by time, and returns a short summary: services involved, duration, and the first ERROR.",
+          "Loads one trace from the trace API. Returns the summary and the events in time order: services, duration, and the first ERROR.",
         inputSchema: {
           type: "object",
           properties: {
             traceId: {
               type: "string",
-              description: "מזהה הטרנזקציה הייחודי לחיפוש (למשל: trace_123)",
+              description: "Trace id to load, for example trace_500",
             },
           },
           required: ["traceId"],
@@ -84,9 +60,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     try {
       // ולידציה של הפרמטרים בעזרת Zod
       const { traceId } = z.object({ traceId: z.string() }).parse(args);
-
-      const logs = await readServiceLogs();
-      const result = analyzeTrace(traceId, logs);
+      const result = await fetchTrace(traceId, apiUrl);
 
       return {
         content: [
@@ -96,10 +70,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           },
         ],
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
       return {
         isError: true,
-        content: [{ type: "text", text: `שגיאה בניתוח הלוגים: ${error.message}` }],
+        content: [{ type: "text", text: message }],
       };
     }
   }
@@ -113,7 +88,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("Tracing MCP Server running on stdio");
+  console.error(`Tracing MCP Server running on stdio, API ${apiUrl}`);
 }
 
 main().catch((error) => {
