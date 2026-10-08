@@ -1,12 +1,10 @@
 # MCP Tracing Agent
 
-A small [Model Context Protocol](https://modelcontextprotocol.io) server that reconstructs one distributed trace from logs of several services.
-
-An agent (for example Cursor) calls a single tool with a trace id. The server asks the trace API for that id and returns the timeline. That is the same summary and events the website shows.
+A small [Model Context Protocol](https://modelcontextprotocol.io) server. An agent (for example Cursor) calls one tool with a trace id. The server asks the trace API for that id and returns the timeline. The website shows the same summary and events.
 
 ## Why this exists
 
-In a system with more than one service, one user action is split across several log files. Searching each file by hand is slow, and the lines are not in one place. This server does that search and sort, and gives the result back to the agent as a tool.
+In a system with more than one service, one user action is split across several log files. Searching each file by hand is slow, and the lines are not in one place. The API keeps the events for a trace and returns them in time order. The tool gives that result back to the agent.
 
 ## How it works
 
@@ -77,7 +75,7 @@ npm test
 npm run build
 ```
 
-`npm test` checks three things: events are sorted by time, an unknown trace id returns no events, and `trace_500` names `payment-service` as the first error.
+`npm test` runs the analyzer tests, the API test, and the fetch-trace tests. The analyzer checks that events are sorted by time, an unknown trace id returns no events, and `trace_500` names `payment-service` as the first error. The API test checks that same timeline through Nest. The fetch-trace tests check that the tool's client reads the JSON and reports when the API is down.
 
 Cursor starts the server itself. In `~/.cursor/mcp.json`:
 
@@ -95,7 +93,9 @@ Cursor starts the server itself. In `~/.cursor/mcp.json`:
 }
 ```
 
-`TRACE_API_URL` defaults to `http://localhost:3000`. The API has to be running. If it is down, the tool returns an error and the process stays up. Then ask the agent to analyze `trace_999`.
+`TRACE_API_URL` defaults to `http://localhost:3000`. The API and Postgres have to be running. If the API is down, the tool returns an error and the process stays up.
+
+After `npm run build`, switch `tracing-agent` off and on in Cursor Settings, under MCP. Cursor keeps the previous Node process until you do that. The new process prints `API http://localhost:3000` on stderr. Then ask the agent to analyze `trace_999`.
 
 The process speaks MCP on stdout. Debug lines go to stderr only, so they do not break the protocol.
 
@@ -125,6 +125,8 @@ npm run dev -w @tracing/web
 ```
 
 Open `http://localhost:5173`. The page calls the API on port 3000.
+
+![Trace console showing trace_500, with the payment timeout marked as the first error](docs/website.png)
 
 ## Tool
 
