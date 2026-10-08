@@ -2,6 +2,8 @@
 
 A small [Model Context Protocol](https://modelcontextprotocol.io) server. An agent (for example Cursor) calls one tool with a trace id. The server asks the trace API for that id and returns the timeline. The website shows the same summary and events.
 
+[Watch the two-minute technical overview](docs/technical-overview.mp4)
+
 ## Why this exists
 
 In a system with more than one service, one user action is split across several log files. Searching each file by hand is slow, and the lines are not in one place. The API keeps the events for a trace and returns them in time order. The tool gives that result back to the agent.
